@@ -18,7 +18,7 @@ def pv_power_estimated(pv_panel, irr_data):  #implement tilt and azimuth as inpu
     length =  pv_panel.loc[0, 'length']
     width =  pv_panel.loc[0, 'width']
     alfa =  pv_panel.loc[0, 'alfa']
-    PR = 0.75   #performance ratio
+    PR = 0.9   #performance ratio
 
     #STC values for PV panels
     T_ref = 25
@@ -32,7 +32,7 @@ def pv_power_estimated(pv_panel, irr_data):  #implement tilt and azimuth as inpu
 
     # Panel Power Output
     time_index = irr_data.index
-    PV_power = (width*length)*no_panels*n_eff*irr_ref*PR                                #np.round(P*irr_eff/irr_ref)  # (NEED SOURCE FOR THIS EQUATION)
+    PV_power = (width*length)*no_panels*n_eff*irr_ref*PR*10**-3                                #np.round(P*irr_eff/irr_ref)  # (NEED SOURCE FOR THIS EQUATION)
     PV_power = np.nan_to_num(PV_power, nan=0)
     pv_power_df = pd.DataFrame({'PV_power': PV_power}, index=time_index)
     
