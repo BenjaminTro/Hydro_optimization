@@ -4,6 +4,7 @@ from pyomo.environ import ConcreteModel,Set,RangeSet,Param,Suffix,Reals,NonNegat
 from pyomo.core import Constraint,Var,Block,ConstraintList
 from pyomo.opt import SolverFactory, SolverStatus, TerminationCondition
 import matplotlib.pyplot as plt
+from calculations.datahandling import *
 
 model = pyo.ConcreteModel()
 
@@ -19,6 +20,12 @@ Pmax = {'Hydro1':41, 'Hydro2':60, 'Solar':30, 'Market':np.inf}
 #Defining periods of 1 hour throughout a day
 model.periods = pyo.Set(initialize=[1,2,3,4,5,6,7, 8 , 9 , 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24])
 
+#Reading of historical data for market prices
+market_prices={} 
+input_data_market = read_csv_data('data/Market_price.csv')
+df_market=input_data_market['2018-01-30':'2018-01-31']
+print(df_market.values)
+    
 #Solar production based on forecast (should come from irradiance data)
 
 Solar_p= {1:0, 2:0, 3:0, 4:0, 5:2, 6:5, 7:8, 8:10, 9:12, 10:15, 11:18, 12:22, 13:25, 14:28, 15:30, 16:30, 17:30, 18:25, 19:20, 
