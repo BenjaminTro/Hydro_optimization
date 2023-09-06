@@ -45,7 +45,7 @@ def convert_to_dict(dataframe, date_1, date_2):
         else:
             result_dict[i] = None  # Assign None for keys without corresponding rows
     unnested_dict = {key: value[0] for key, value in result_dict.items()}
-    # Print the resulting dictionary
+    # Return the resulting dictionary
     return unnested_dict
 
 
