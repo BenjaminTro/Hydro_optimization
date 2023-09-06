@@ -25,5 +25,28 @@ def read_excel_data(filename):
     df=pd.read_excel(filename, header=[2])
     return df
 
+def read_specific_dates(filename, date_1, date_2):
+    df=read_csv_data(filename)
+    df=df[date_1 : date_2]
+    return df
+
+def convert_to_dict(dataframe, date_1, date_2):
+    df_2=dataframe[date_1:date_2]
+    # Convert the selected DataFrame to float
+    df_2 = df_2.astype(float)
+
+    result_dict = {}
+
+    # Iterate through the DataFrame and assign values to keys ranging from 1 to 25
+    for i in range(1, 25):
+        # Check if there are more rows in the DataFrame
+        if i <= len(df_2):
+            result_dict[i] = df_2.iloc[i - 1].tolist()  # Convert the row to a list
+        else:
+            result_dict[i] = None  # Assign None for keys without corresponding rows
+    unnested_dict = {key: value[0] for key, value in result_dict.items()}
+    # Print the resulting dictionary
+    return unnested_dict
+
 
 
