@@ -1,3 +1,9 @@
+import sys
+#sys.path.append('C:\\Users\\oscar\\Documents\\Hydro_optimization') #OSCAR path
+sys.path.append('C:\\Users\\benny\\Documents\\Hydro_optimization')  #BENJAMIN path
+#sys.path.append('C:\\Users\\benny\\Documents\\Hydro_optimization') #ESPEN path
+
+
 import pyomo.environ as pyo
 import numpy as np
 from pyomo.environ import ConcreteModel,Set,RangeSet,Param,Suffix,Reals,NonNegativeReals,NonPositiveReals,Binary,Objective,minimize,maximize,value
