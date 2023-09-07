@@ -57,7 +57,7 @@ def convert_to_dict(dataframe, date_1, date_2, timeresolution):
         result_dict[i] = row[0]  # Convert the row to a list
 
     # Return the resulting dictionary
-    return unnested_dict
+    return result_dict
 
 def average_value(dictionary):
     if not dictionary:
