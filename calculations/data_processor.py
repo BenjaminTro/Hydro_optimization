@@ -1,11 +1,6 @@
 import pandas as pd
 import numpy as np
 
-#Reading PV panel specifications:
-def read_excel_data(file_path):
-    pv_panel = pd.read_excel(file_path, header=[2])
-    return pv_panel
-
 def pv_power_estimated(pv_panel, irr_data):  #implement tilt and azimuth as inputs as well in order to more accurately calculate PV power production (use book from home)
     # Extract specific values from pv_data (assumed to be a DataFrame)
     P =  pv_panel.loc[0,'P_max']
@@ -32,10 +27,13 @@ def pv_power_estimated(pv_panel, irr_data):  #implement tilt and azimuth as inpu
 
     # Panel Power Output
     time_index = irr_data.index
-    PV_power = (width*length)*no_panels*n_eff*irr_ref*PR*10**-3                                #np.round(P*irr_eff/irr_ref)  # (NEED SOURCE FOR THIS EQUATION)
+    PV_cap = P*no_panels*PR*n_eff
+    PV_power = (width*length)*no_panels*n_eff*irr_ref*PR*10**-6                                #np.round(P*irr_eff/irr_ref)  # (NEED SOURCE FOR THIS EQUATION)
+    PV_power = np.where(PV_power >= PV_cap, PV_cap, PV_power)  # Element-wise comparison
     PV_power = np.nan_to_num(PV_power, nan=0)
     pv_power_df = pd.DataFrame({'PV_power': PV_power}, index=time_index)
     
+
     return pv_power_df
     
 

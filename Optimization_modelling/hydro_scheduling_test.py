@@ -10,7 +10,7 @@ from pyomo.environ import ConcreteModel,Set,RangeSet,Param,Suffix,Reals,NonNegat
 from pyomo.core import Constraint,Var,Block,ConstraintList
 from pyomo.opt import SolverFactory, SolverStatus, TerminationCondition
 import matplotlib.pyplot as plt
-from ..calculations import datahandling
+from calculations.datahandling import *
 
 model = pyo.ConcreteModel()
 
