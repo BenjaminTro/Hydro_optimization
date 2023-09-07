@@ -48,5 +48,13 @@ def convert_to_dict(dataframe, date_1, date_2):
     # Return the resulting dictionary
     return unnested_dict
 
+def average_value(dictionary):
+    if not dictionary:
+        return 0.0
+    total_sum=sum(dictionary.values())
+    avg=total_sum/len(dictionary)
+    return avg
+    
+     
 
 
