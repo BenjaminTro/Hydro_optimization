@@ -1,7 +1,7 @@
 import sys
 sys.path.append('C:\\Users\oscar\OneDrive\Dokumenter\Høst 2023\TET4565 Spesialiseringsemne\Hydro_optimization') #OSCAR path
 sys.path.append('C:\\Users\\benny\\Documents\\Hydro_optimization')  #BENJAMIN path
-#sys.path.append('C:\\Users\\benny\\Documents\\Hydro_optimization') #ESPEN path
+sys.path.append('C:\\Users\\Epsilon Delta\\OneDrive - NTNU\\Energi og Miljø NTNU\\Høst2023\\TET4565 Fordypningsemne\\Hydro_optimization') #ESPEN path
 
 
 import pyomo.environ as pyo
@@ -13,11 +13,12 @@ import matplotlib.pyplot as plt
 from calculations.datahandling import*
 from calculations.data_processor import* 
 
+
 model = pyo.ConcreteModel()
 
 #extract average market price
 input_data_market = read_csv_data('data/Market_price.csv')
-market_prices_h=convert_to_dict(input_data_market, '2018-05-28', '2018-05-28')
+market_prices_h=convert_to_dict(input_data_market, '2018-05-28', '2018-05-28', 'H')
 avg_market_price=average_value(market_prices_h)
 
 #Initial costs for plants/market [NOK]
@@ -36,7 +37,7 @@ model.periods = pyo.Set(initialize=[1,2,3,4,5,6,7, 8 , 9 , 10, 11, 12, 13, 14, 1
 input_data_PV = read_excel_data('data/PV_spec.xlsx')
 input_data_Irr = read_irr_data('data/Data_solar_irr_NOR.csv')
 PV_power = pv_power_estimated(input_data_PV,input_data_Irr)
-Solar_p=convert_to_dict(PV_power, '2018-05-28', '2018-05-28')
+Solar_p=convert_to_dict(PV_power, '2018-05-28', '2018-05-28', 'H')
 
 #Solar_p= {1:0, 2:0, 3:0, 4:0, 5:2, 6:5, 7:8, 8:10, 9:12, 10:15, 11:18, 12:22, 13:25, 14:28, 15:30, 16:30, 17:30, 18:25, 19:20, 20:15, 21:10, 22:5, 23:0, 24:0}
 

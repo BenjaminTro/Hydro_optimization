@@ -30,21 +30,32 @@ def read_specific_dates(filename, date_1, date_2):
     df=df[date_1 : date_2]
     return df
 
-def convert_to_dict(dataframe, date_1, date_2):
-    df_2=dataframe[date_1:date_2]
-    # Convert the selected DataFrame to float
-    df_2 = df_2.astype(float)
+def convert_to_dict(dataframe, date_1, date_2, timeresolution):
+    date_1 = pd.to_datetime(date_1)
+    date_2 = pd.to_datetime(date_2)
+    df_2 = dataframe[date_1:date_2]
+
+    # Resample the DataFrame based on the selected time resolution and apply sum aggregation
+    if timeresolution == 'H':
+        resampled_df = df_2
+    elif timeresolution == 'D':
+        resampled_df = df_2.resample('D').sum()
+    elif timeresolution == 'M':
+        resampled_df = df_2.resample('M').sum()
+    elif timeresolution == 'Y':
+        resampled_df = df_2.resample('Y').sum()
+    else:
+        raise ValueError("Unsupported time resolution. Supported values are 'H' (hours), 'D' (days), 'M' (months), and 'Y' (years).")
+
+    # Convert the resampled DataFrame to float
+    resampled_df = resampled_df.astype(float)
 
     result_dict = {}
 
-    # Iterate through the DataFrame and assign values to keys ranging from 1 to 25
-    for i in range(1, 25):
-        # Check if there are more rows in the DataFrame
-        if i <= len(df_2):
-            result_dict[i] = df_2.iloc[i - 1].tolist()  # Convert the row to a list
-        else:
-            result_dict[i] = None  # Assign None for keys without corresponding rows
-    unnested_dict = {key: value[0] for key, value in result_dict.items()}
+    # Iterate through the DataFrame and assign values to keys ranging from 1 to the number of rows
+    for i, (_, row) in enumerate(resampled_df.iterrows(), start=1):
+        result_dict[i] = row[0]  # Convert the row to a list
+
     # Return the resulting dictionary
     return unnested_dict
 
