@@ -1,7 +1,7 @@
 import sys
 sys.path.append('C:\\Users\oscar\OneDrive\Dokumenter\Høst 2023\TET4565 Spesialiseringsemne\Hydro_optimization') #OSCAR path
 sys.path.append('C:\\Users\\benny\\Documents\\Hydro_optimization')  #BENJAMIN path
-#sys.path.append('C:\\Users\\benny\\Documents\\Hydro_optimization') #ESPEN path
+sys.path.append('C:\\Users\\Epsilon Delta\\OneDrive - NTNU\\Energi og Miljø NTNU\\Høst2023\\TET4565 Fordypningsemne\\Hydro_optimization') #ESPEN path
 
 
 import pyomo.environ as pyo
