@@ -66,6 +66,11 @@ def average_value(dictionary):
     avg=total_sum/len(dictionary)
     return avg
     
+def scale_dict(dictionary, constant):
+    for key in dictionary:
+        dictionary[key]=dictionary[key]*constant
+    return dictionary 
+
      
 
 

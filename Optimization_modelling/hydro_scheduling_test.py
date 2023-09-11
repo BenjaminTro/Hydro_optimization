@@ -26,16 +26,16 @@ market_prices_h=convert_to_dict(input_data_market, start_date, end_date, 'H')
 avg_market_price=average_value(market_prices_h)
 
 #Initial costs for plants/market [NOK]
-ai={'Hydro1':200, 'Hydro2':600, 'Solar':1000, 'Market':1000}
+ai={'Hydro1':600, 'Hydro2':600, 'Solar':1000, 'Market':1000}
 #Variable costs for plants/ market price [NOK/MWh]
-bi={'Hydro1':30, 'Hydro2':25, 'Solar':10, 'Market':avg_market_price}
+bi={'Hydro1':25, 'Hydro2':25, 'Solar':10, 'Market':avg_market_price}
 #Production levels / Purchase from market [MW]
 Pmin = {'Hydro1':0, 'Hydro2':0, 'Solar':0, 'Market':0}
 Pmax = {'Hydro1':200, 'Hydro2':200, 'Solar':200, 'Market':np.inf}
 
 #Defining periods of 1 hour throughout a day
 model.periods = pyo.Set(initialize=[1,2,3,4,5,6,7, 8 , 9 , 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24])
-       
+
 #Solar production based on forecast (should come from irradiance data)
 
 input_data_PV = read_excel_data('data/PV_spec.xlsx')
@@ -108,3 +108,5 @@ plt.ylabel("Production [MW]")
 plt.title("Optimal production plan")
 plt.legend()
 plt.show()
+
+
