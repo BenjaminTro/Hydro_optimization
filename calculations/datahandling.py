@@ -67,10 +67,15 @@ def average_value(dictionary):
     return avg
     
 def scale_dict(dictionary, constant):
+    scaled={}
     for key in dictionary:
-        dictionary[key]=dictionary[key]*constant
-    return dictionary 
+        scaled[key]=dictionary[key]*constant
+    return scaled 
 
-     
+def stack_dicts(dict1, dict2, dict3):
+    stacked_dict = {k: [dict1[k], dict2[k], dict3[k]] for k in dict1}
+    return stacked_dict     
 
-
+def stack_dicts2(dict1, dict2):
+    stacked_dict = {k: [dict1[k], dict2[k]] for k in dict1}
+    return stacked_dict     
