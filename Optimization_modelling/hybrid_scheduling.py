@@ -46,7 +46,7 @@ Solar_p=scale_dict(Solar_1, 10)
 
 #--Constants--
 Constants= {
-    'Market_penalty':600, 
+    'Market_penalty':100, 
 }
 
 #--Defining sets--

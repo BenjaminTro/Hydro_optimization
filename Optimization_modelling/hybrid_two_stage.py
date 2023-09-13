@@ -44,11 +44,12 @@ PV_power = pv_power_estimated(input_data_PV,input_data_Irr)
 Solar_1=convert_to_dict(PV_power, start_date, end_date, 'H')
 Solar_p=scale_dict(Solar_1, 10)
 
+
 #--Constants--
 Constants= {
     'Market_penalty':100, 
     'Scenarios':['S_high', 'S_avg', 'S_low'], 
-    'probs':{'S_high':0, 'S_avg':1, 'S_low':0}    
+    'probs':{'S_high':0, 'S_avg':0, 'S_low':1}    
 }
 
 #--Defining sets--
@@ -68,21 +69,17 @@ model.periods = pyo.Set(initialize=periods)
 #defining scenarios for two-stage problem 
 model.scenarios=pyo.Set(initialize=Constants['Scenarios'])
 
-#probabilities for each scenario 
-model.probs=pyo.Param(model.scenarios, initialize=Constants['probs'])
-
-S_high=scale_dict(Solar_p, 1.2)
-S_avg=scale_dict(Solar_p, 1.0)
-S_low=scale_dict(Solar_p, 0.8)
+#Scenarios for solar forecast 
+S_high=scale_dict(Solar_p, 1.5)
+S_avg=scale_dict(Solar_p, 1)
+S_low=scale_dict(Solar_p, 0.3)
 
 #--Defining parameters--
 #Inital cost of buying from market
 Fi=600
 model.Fi=pyo.Param(model.market, initialize=Fi)
-
 #Averaged NO3 market price for chosen simulation day
 model.Mi=pyo.Param(model.market, initialize=avg_market_price)
-
 #Initial costs for plants
 model.Ci=pyo.Param(model.plants, initialize=data['hydro']['Ci'])
 model.Si=pyo.Param(model.solar, initialize=data['solar']['Ci'])
@@ -94,11 +91,11 @@ model.Pmin=pyo.Param(model.plants, initialize=data['hydro']['P_min'])
 model.Pmax=pyo.Param(model.plants, initialize=data['hydro']['P_max'])
 model.Phi_min=pyo.Param(model.solar, initialize=data['solar']['P_min'])
 model.Phi_max=pyo.Param(model.solar, initialize=data['solar']['P_max'])
-
+#probabilities for each scenario 
+model.probs=pyo.Param(model.scenarios, initialize=Constants['probs'])
 
 #Load (should be imported from dataset)
 L= {1:30, 2:20, 3:20, 4:30, 5:50, 6:80, 7:50, 8:90, 9:110, 10:150, 11:120, 12:80, 13:70, 14:80, 15:90, 16:160, 17:170, 18:150, 19:120, 20:100, 21:70, 22:60, 23:50, 24:40} 
-
 
 #--Defining variables and bounds-- 
 #Production from hydro plants
@@ -107,22 +104,22 @@ def p_bounds(model,i,j):
 model.p = pyo.Var(model.plants,model.periods, bounds=p_bounds)
 
 #Production from solar plants
-#def phi_bounds(model,s,j):
-    #return (model.Phi_min[s],model.Phi_max[s])
-#model.phi = pyo.Var(model.solar,model.periods, bounds=phi_bounds)
+def phi_bounds(model,s,j):
+    return (model.Phi_min[s],model.Phi_max[s])
+model.phi = pyo.Var(model.solar,model.periods, bounds=phi_bounds)
 
 model.phi_s=pyo.Var(model.scenarios,model.periods, within=NonNegativeReals)
 
 #Buying from market 
-#model.m = pyo.Var(model.market, model.periods, within=NonNegativeReals)
+model.m = pyo.Var(model.market, model.periods, within=NonNegativeReals)
 
 model.m_s=pyo.Var(model.scenarios, model.periods, within=NonNegativeReals)
 
 #--Defining constraints--
 
-#def Solar_rule(model,j):
-    #return  model.phi['Solar',j] == Solar_p[j]
-#model.solar_cons = pyo.Constraint(model.periods, rule=Solar_rule)
+def Solar_rule(model,j):
+    return  model.phi['Solar',j] == Solar_p[j]
+model.solar_cons = pyo.Constraint(model.periods, rule=Solar_rule)
 
 def Solar_high(model,j):
         return  model.phi_s['S_high',j] == S_high[j]
@@ -130,20 +127,36 @@ model.high_cons = pyo.Constraint(model.periods, rule=Solar_high)
 
 def Solar_avg(model,j):
         return  model.phi_s['S_avg',j] == S_avg[j]
-model.high_cons = pyo.Constraint(model.periods, rule=Solar_avg)
+model.avg_cons = pyo.Constraint(model.periods, rule=Solar_avg)
 
 def Solar_low(model,j):
         return  model.phi_s['S_low',j] == S_low[j]
-model.high_cons = pyo.Constraint(model.periods, rule=Solar_low)
+model.low_cons = pyo.Constraint(model.periods, rule=Solar_low)
 
-def load_rule(model,s,j):
-    return model.p['Hydro1',j] + model.p['Hydro2',j] + model.phi_s['S_high',j]+model.phi_s['S_avg',j]+model.phi_s['S_low',j] + model.m_s[s,j] == L[j]
-model.load_cons = pyo.Constraint(model.scenarios, model.periods, rule=load_rule)
+def load_rule_FirstStage(model, j):
+    return model.p['Hydro1', j] + model.p['Hydro2', j] + model.phi['Solar', j] + model.m['Market', j] == L[j]
+model.load_cons_FirstStage = pyo.Constraint(model.periods, rule=load_rule_FirstStage)
+
+def load_rule_TwoStage(model, s, j):
+    return model.p['Hydro1', j] + model.p['Hydro2', j] + model.phi_s[s, j] + model.m_s[s, j] == L[j]
+model.load_cons_TwoStage = pyo.Constraint(model.scenarios, model.periods, rule=load_rule_TwoStage)
+
 
 
 #Objective function 
 def ObjRule(model):
-    return sum(model.Ci[i]+model.yi[i]*model.p[i,j] for i in model.plants for j in model.periods)+sum(model.Si[s] for s in model.solar)+sum(model.Fi[n] for n in model.market)+sum(model.probs[l]*(model.ki[i]*model.phi_s[l,j]) for i in model.solar for l in model.scenarios for j in model.periods)+sum(model.probs[l]*(model.Mi[n]*model.m_s[l,j]) for l in model.scenarios for n in model.market for j in model.periods)
+    #return sum(model.Ci[i]+model.yi[i]*model.p[i,j] for i in model.plants for j in model.periods)+sum(model.Si[s] for s in model.solar)+sum(model.Fi[n] for n in model.market)+sum(model.probs[l]*(model.ki[i]*model.phi_s[l,j]) for i in model.solar for l in model.scenarios for j in model.periods)+sum(model.probs[l]*(model.Mi[n]*model.m_s[l,j]) for l in model.scenarios for n in model.market for j in model.periods)
+    first_stage_obj = sum(model.Ci[i] + model.yi[i] * model.p[i, j] for i in model.plants for j in model.periods) \
+        + sum(model.Si[s] + model.ki[s] * model.phi[s, j] for s in model.solar for j in model.periods) \
+        + sum(model.Fi[n] + model.Mi[n] * model.m[n, j] for n in model.market for j in model.periods)
+
+    # Second stage objective (scenario-dependent)
+    second_stage_obj = sum(model.probs[l] * (
+        model.ki[s] * model.phi_s[l, j] + model.Mi[n] * model.m_s[l, j]
+    ) for s in model.solar for l in model.scenarios for n in model.market for j in model.periods)
+
+    # Total objective is the sum of first and second stage objectives
+    return first_stage_obj + second_stage_obj
 model.obj= pyo.Objective(rule=ObjRule, sense=pyo.minimize)
 
 #defining dual 
@@ -169,21 +182,45 @@ prod={}
 for i in model.plants:
     prod[i]=[value(model.p[i, j]) for j in model.periods]
     
-#solar={}
-#for s in model.solar:
-    #solar[s]=[value(model.phi[s, j]) for j in model.periods]
+solar={}
+for s in model.solar:
+    solar[s]=[value(model.phi[s, j]) for j in model.periods]
 
 market={}    
-for n in model.scenarios:
-    market[n]=[value(model.m_s[n,j]) for j in model.periods]
+for n in model.market:
+    market[n]=[value(model.m[n,j]) for j in model.periods]
+    
+market_scenarios={}
+for k in model.scenarios:
+    market_scenarios[k]=[value(model.m_s[k,j]) for j in model.periods]
     
 scenarios={}
 for c in model.scenarios:
     scenarios[c]=[value(model.phi_s[c,j]) for j in model.periods]
     
 
+#Plotting stacked plot for production plan
+     
+plt.figure(figsize=(10, 6))
+bottom = [0] * len(model.periods)
 
-#Plotting stacked plot for production plan     
+for plant in model.plants:
+    plt.bar(model.periods, prod[plant], label=plant, bottom=bottom)
+    bottom = [bottom[i] + prod[plant][i] for i in range(len(model.periods))]
+    
+for mark in model.market:
+    plt.bar(model.periods, market[mark], label='Market', bottom=bottom)
+    bottom = [bottom[i] + market[mark][i] for i in range(len(model.periods))]
+
+plt.bar(model.periods, solar['Solar'], label='Solar', bottom=bottom)
+bottom = [bottom[i] + solar['Solar'][i] for i in range(len(model.periods))]
+    
+plt.xlabel("Period [h]")
+plt.ylabel("Production [MW]")
+plt.title("Optimal production plan (base case)")
+plt.legend()
+plt.show()
+
 plt.figure(figsize=(10, 6))
 bottom = [0] * len(model.periods)
 
@@ -191,24 +228,58 @@ for plant in model.plants:
     plt.bar(model.periods, prod[plant], label=plant, bottom=bottom)
     bottom = [bottom[i] + prod[plant][i] for i in range(len(model.periods))]
 
-#for sol in model.solar:
-    #plt.bar(model.periods, solar[sol], label='Solar', bottom=bottom)
-    #bottom = [bottom[i] + solar[sol][i] for i in range(len(model.periods))]
+
+plt.bar(model.periods, market_scenarios['S_high'], label='Market', bottom=bottom)
+bottom = [bottom[i] + market_scenarios['S_high'][i] for i in range(len(model.periods))]
     
-for mark in model.scenarios:
-    plt.bar(model.periods, market[mark], label=model.m_s
-            
-            [mark], bottom=bottom)
-    bottom = [bottom[i] + market[mark][i] for i in range(len(model.periods))]
-    
-for scen in model.scenarios:
-    plt.bar(model.periods, scenarios[scen], label=scen, bottom=bottom)
-    bottom = [bottom[i] + scenarios[scen][i] for i in range(len(model.periods))]
+
+plt.bar(model.periods, scenarios['S_high'], label='Solar', bottom=bottom)
+bottom = [bottom[i] + scenarios['S_high'][i] for i in range(len(model.periods))]
 
 plt.xlabel("Period [h]")
 plt.ylabel("Production [MW]")
-plt.title("Optimal production plan")
+plt.title("Optimal production plan (S_high)")
 plt.legend()
+plt.show()
+
+plt.figure(figsize=(10, 6))
+bottom = [0] * len(model.periods)
+
+for plant in model.plants:
+    plt.bar(model.periods, prod[plant], label=plant, bottom=bottom)
+    bottom = [bottom[i] + prod[plant][i] for i in range(len(model.periods))]
 
 
+plt.bar(model.periods, market_scenarios['S_avg'], label='Market', bottom=bottom)
+bottom = [bottom[i] + market_scenarios['S_avg'][i] for i in range(len(model.periods))]
+    
+
+plt.bar(model.periods, scenarios['S_avg'], label='Solar', bottom=bottom)
+bottom = [bottom[i] + scenarios['S_avg'][i] for i in range(len(model.periods))]
+
+plt.xlabel("Period [h]")
+plt.ylabel("Production [MW]")
+plt.title("Optimal production plan (S_avg)")
+plt.legend()
+plt.show()
+
+plt.figure(figsize=(10, 6))
+bottom = [0] * len(model.periods)
+
+for plant in model.plants:
+    plt.bar(model.periods, prod[plant], label=plant, bottom=bottom)
+    bottom = [bottom[i] + prod[plant][i] for i in range(len(model.periods))]
+
+
+plt.bar(model.periods, market_scenarios['S_low'], label='Market', bottom=bottom)
+bottom = [bottom[i] + market_scenarios['S_low'][i] for i in range(len(model.periods))]
+    
+
+plt.bar(model.periods, scenarios['S_low'], label='Solar', bottom=bottom)
+bottom = [bottom[i] + scenarios['S_low'][i] for i in range(len(model.periods))]
+
+plt.xlabel("Period [h]")
+plt.ylabel("Production [MW]")
+plt.title("Optimal production plan (S_low)")
+plt.legend()
 plt.show()
