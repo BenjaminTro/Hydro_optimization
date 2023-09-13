@@ -48,7 +48,7 @@ Solar_p=scale_dict(Solar_1, 10)
 Constants= {
     'Market_penalty':100, 
     'Scenarios':['S_high', 'S_avg', 'S_low'], 
-    'probs':{'S_high':1/3, 'S_avg':1/3, 'S_low':1/3}    
+    'probs':{'S_high':0, 'S_avg':1, 'S_low':0}    
 }
 
 #--Defining sets--
@@ -71,13 +71,9 @@ model.scenarios=pyo.Set(initialize=Constants['Scenarios'])
 #probabilities for each scenario 
 model.probs=pyo.Param(model.scenarios, initialize=Constants['probs'])
 
-S_high=scale_dict(Solar_p, 120)
-S_avg=scale_dict(Solar_p, 100)
-S_low=scale_dict(Solar_p, 80)
-
-#Stacking scenarios into one dictionary 
-Solar_s=stack_dicts(S_high, S_avg, S_low)
-
+S_high=scale_dict(Solar_p, 1.2)
+S_avg=scale_dict(Solar_p, 1.0)
+S_low=scale_dict(Solar_p, 0.8)
 
 #--Defining parameters--
 #Inital cost of buying from market
@@ -111,35 +107,43 @@ def p_bounds(model,i,j):
 model.p = pyo.Var(model.plants,model.periods, bounds=p_bounds)
 
 #Production from solar plants
-def phi_bounds(model,s,j):
-    return (model.Phi_min[s],model.Phi_max[s])
-model.phi = pyo.Var(model.solar,model.periods, bounds=phi_bounds)
+#def phi_bounds(model,s,j):
+    #return (model.Phi_min[s],model.Phi_max[s])
+#model.phi = pyo.Var(model.solar,model.periods, bounds=phi_bounds)
 
 model.phi_s=pyo.Var(model.scenarios,model.periods, within=NonNegativeReals)
 
 #Buying from market 
-model.m = pyo.Var(model.market, model.periods, within=NonNegativeReals)
+#model.m = pyo.Var(model.market, model.periods, within=NonNegativeReals)
 
 model.m_s=pyo.Var(model.scenarios, model.periods, within=NonNegativeReals)
 
 #--Defining constraints--
 
-def Solar_rule(model,j):
-    return  model.phi['Solar',j] == Solar_p[j]
-model.solar_cons = pyo.Constraint(model.periods, rule=Solar_rule)
+#def Solar_rule(model,j):
+    #return  model.phi['Solar',j] == Solar_p[j]
+#model.solar_cons = pyo.Constraint(model.periods, rule=Solar_rule)
 
-def Solar_scenario(model,s,j):
-    return model.phi_s[s,j]==Solar_s[s,j]
-model.solar_scenario_cons=pyo.Constraint(model.scenarios, model.periods, rule=Solar_scenario)
+def Solar_high(model,j):
+        return  model.phi_s['S_high',j] == S_high[j]
+model.high_cons = pyo.Constraint(model.periods, rule=Solar_high)
+
+def Solar_avg(model,j):
+        return  model.phi_s['S_avg',j] == S_avg[j]
+model.high_cons = pyo.Constraint(model.periods, rule=Solar_avg)
+
+def Solar_low(model,j):
+        return  model.phi_s['S_low',j] == S_low[j]
+model.high_cons = pyo.Constraint(model.periods, rule=Solar_low)
 
 def load_rule(model,s,j):
-    return model.p['Hydro1',j] + model.p['Hydro2',j] + model.phi['Solar',j] + model.phi_s[s,j]+ model.m['Market',j] + model.m_s[s,j]== L[j]
+    return model.p['Hydro1',j] + model.p['Hydro2',j] + model.phi_s['S_high',j]+model.phi_s['S_avg',j]+model.phi_s['S_low',j] + model.m_s[s,j] == L[j]
 model.load_cons = pyo.Constraint(model.scenarios, model.periods, rule=load_rule)
 
 
 #Objective function 
 def ObjRule(model):
-    return sum(model.Ci[i]+model.yi[i]*model.p[i,j] for i in model.plants for j in model.periods) +sum(model.Si[s] +model.ki[s]*model.phi[s,j] for s in model.solar for j in model.periods )+sum(model.Fi[n]+model.Mi[n]*model.m[n,j] for n in model.market for j in model.periods)+sum(model.probs[s]*(model.ki[i]*model.phi[s,j] for i in model.solar for s in model.scenarios for j in model.periods))+sum(model.probs[s]*(model.Mi[n]*model.m_s[s,j] for s in model.scenarios for n in model.market for j in model.periods))
+    return sum(model.Ci[i]+model.yi[i]*model.p[i,j] for i in model.plants for j in model.periods)+sum(model.Si[s] for s in model.solar)+sum(model.Fi[n] for n in model.market)+sum(model.probs[l]*(model.ki[i]*model.phi_s[l,j]) for i in model.solar for l in model.scenarios for j in model.periods)+sum(model.probs[l]*(model.Mi[n]*model.m_s[l,j]) for l in model.scenarios for n in model.market for j in model.periods)
 model.obj= pyo.Objective(rule=ObjRule, sense=pyo.minimize)
 
 #defining dual 
@@ -159,18 +163,23 @@ for v in model.component_data_objects(pyo.Var):
 model.display()
 model.dual.display()
 
+
 #appending production values in dictionary
 prod={}
 for i in model.plants:
     prod[i]=[value(model.p[i, j]) for j in model.periods]
     
-solar={}
-for s in model.solar:
-    solar[s]=[value(model.phi[s, j]) for j in model.periods]
+#solar={}
+#for s in model.solar:
+    #solar[s]=[value(model.phi[s, j]) for j in model.periods]
 
 market={}    
-for n in model.market:
-    market[n]=[value(model.m[n,j]) for j in model.periods]
+for n in model.scenarios:
+    market[n]=[value(model.m_s[n,j]) for j in model.periods]
+    
+scenarios={}
+for c in model.scenarios:
+    scenarios[c]=[value(model.phi_s[c,j]) for j in model.periods]
     
 
 
@@ -182,16 +191,24 @@ for plant in model.plants:
     plt.bar(model.periods, prod[plant], label=plant, bottom=bottom)
     bottom = [bottom[i] + prod[plant][i] for i in range(len(model.periods))]
 
-for sol in model.solar:
-    plt.bar(model.periods, solar[sol], label='Solar', bottom=bottom)
-    bottom = [bottom[i] + solar[sol][i] for i in range(len(model.periods))]
+#for sol in model.solar:
+    #plt.bar(model.periods, solar[sol], label='Solar', bottom=bottom)
+    #bottom = [bottom[i] + solar[sol][i] for i in range(len(model.periods))]
     
-for mark in model.market:
-    plt.bar(model.periods, market[mark], label='Market', bottom=bottom)
+for mark in model.scenarios:
+    plt.bar(model.periods, market[mark], label=model.m_s
+            
+            [mark], bottom=bottom)
     bottom = [bottom[i] + market[mark][i] for i in range(len(model.periods))]
+    
+for scen in model.scenarios:
+    plt.bar(model.periods, scenarios[scen], label=scen, bottom=bottom)
+    bottom = [bottom[i] + scenarios[scen][i] for i in range(len(model.periods))]
 
 plt.xlabel("Period [h]")
 plt.ylabel("Production [MW]")
 plt.title("Optimal production plan")
 plt.legend()
+
+
 plt.show()
