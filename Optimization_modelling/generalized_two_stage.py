@@ -23,8 +23,8 @@ def InputData(data_file):
     inputdata = inputdata.set_index('Parameter', drop=True)
     inputdata = inputdata.transpose()
     data = {}
-    data['hydro'] = inputdata[['Ci', 'yi', 'P_min', 'P_max', 'H_max']].drop('Solar')
-    data['solar']=inputdata[['Ci', 'yi', 'P_min', 'P_max']].drop('Hydro1').drop('Hydro2')
+    data['hydro'] = inputdata[['yi', 'P_min', 'P_max', 'H_max']].drop('Solar')
+    data['solar']=inputdata[['yi', 'P_min', 'P_max']].drop('Hydro1').drop('Hydro2')
     return data
 
 
@@ -57,7 +57,9 @@ Constants= {
     'Load_penalty':100, 
     'Hydro_cap':3000,
     'Scenarios':['S_high', 'S_avg', 'S_low'], 
-    'probs':{'S_high':1/3, 'S_avg':1/3, 'S_low':1/3}     
+    'probs':{'S_high':1/3, 'S_avg':1/3, 'S_low':1/3},
+    'yi_s1':{'S_high':25, 'S_avg':25, 'S_low':25}, 
+    'yi_s2':{'S_high':35, 'S_avg':35, 'S_low':35}     
 }
 #Production bounds for hydro plants in stage 1
 def p_bounds(model,i,j):
@@ -102,9 +104,6 @@ def hydro1_scenario_bounds(model, s, j):
 # Production constraint for hydro2 in stage 2
 def hydro2_scenario_bounds(model, s, j):
     return sum(model.p_s2[s, j] for j in model.periods) <= model.Hmax['Hydro2'] - sum(model.p['Hydro2', j] for j in model.periods)
-
-#def Hydro_secondstage(model,s,i):
-    #return sum(model.p_s1[s,j] +model.p_s2[s,j] for j in model.periods)<=model.Hmax[i]-sum(model.p['Hydro1',j] + model.p['Hydro2',j] for j in model.periods)
     
 #Total power generation in stage 1 must be equal to the hourly set load
 def load_rule_FirstStage(model, j):
@@ -125,7 +124,7 @@ def ObjRule(model):
 
     # Second stage objective (scenario-dependent), sum of all production costs
     second_stage_obj = sum(model.probs[l] * (
-        model.yi[i]*(model.p_s1[l,j]+model.p_s2[l,j]) + model.ki[s] * model.phi_s[l, j] + model.Li[n] * model.L_p_s[l, j]
+        model.yi_s1[l]*model.p_s1[l,j]+ model.yi_s2[l]*model.p_s2[l,j] + model.ki[s] * model.phi_s[l, j] + model.Li[n] * model.L_p_s[l, j]
         ) for i in model.plants for s in model.solar for l in model.scenarios for n in model.penalty for j in model.periods)
 
     # Total objective is the sum of first and second stage objectives
@@ -151,12 +150,11 @@ def model_setup(Constants, data):
     #--Defining parameters--
     #Load penalty 
     model.Li=pyo.Param(model.penalty, initialize=Constants['Load_penalty'])
-    #Initial costs for plants
-    model.Ci=pyo.Param(model.plants, initialize=data['hydro']['Ci'])
-    model.Si=pyo.Param(model.solar, initialize=data['solar']['Ci'])
     #Variable costs for plants 
     model.yi=pyo.Param(model.plants, initialize=data['hydro']['yi'])
     model.ki=pyo.Param(model.solar, initialize=data['solar']['yi'])
+    model.yi_s1=pyo.Param(model.scenarios, initialize=Constants['yi_s1'])
+    model.yi_s2=pyo.Param(model.scenarios, initialize=Constants['yi_s2'])
     #Production bounds for plants
     model.Pmin=pyo.Param(model.plants, initialize=data['hydro']['P_min'])
     model.Pmax=pyo.Param(model.plants, initialize=data['hydro']['P_max'])
@@ -197,7 +195,6 @@ def model_setup(Constants, data):
 
     model.hydro_cons=pyo.Constraint(model.plants, rule=Hydro_firststage)
 
-    #model.hydro_scenario_cons=pyo.Constraint(model.scenarios, model.plants, rule=Hydro_secondstage)
     model.hydro1_scenario_cons=pyo.Constraint(model.scenarios, model.periods, rule=hydro1_scenario_bounds)
     
     model.hydro2_scenario_cons=pyo.Constraint(model.scenarios, model.periods,  rule=hydro2_scenario_bounds)
