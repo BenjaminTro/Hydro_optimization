@@ -48,7 +48,7 @@ Solar_p=scale_dict(Solar_1, 10)
 #--Constants--
 Constants= {
     'Load_penalty':100, 
-    'Hydro_cap':2000,
+    'Hydro_cap':3000,
     'Scenarios':['S_high', 'S_avg', 'S_low'], 
     'probs':{'S_high':1/2, 'S_avg':1/4, 'S_low':1/4}    
 }
@@ -137,12 +137,12 @@ def hydro2_bounds(model,s,j):
     return model.p_s2[s,j]<=100
 model.hydro2_cons=pyo.Constraint(model.scenarios, model.periods, rule=hydro2_bounds)
 
-def Hydro_firststage(model,i):
+def Hydro_firststage(model,i,j):
     return sum(model.p['Hydro1',j] + model.p['Hydro2',j] for j in model.periods)<=model.Hmax[i]
-model.hydro_cons=pyo.Constraint(model.plants, rule=Hydro_firststage)
+model.hydro_cons=pyo.Constraint(model.plants, model.periods, rule=Hydro_firststage)
 
 def Hydro_secondstage(model,s,i):
-    return sum(model.p_s1[s,j] +model.p_s2[s,j] for j in model.periods)<=model.Hmax[i]-sum(model.p[i,j] for j in model.periods)
+    return sum(model.p_s1[s,j] +model.p_s2[s,j] for j in model.periods)<=model.Hmax[i]-sum(model.p['Hydro1',j] + model.p['Hydro2',j] for j in model.periods)
 model.hydro_scenario_cons=pyo.Constraint(model.scenarios, model.plants, rule=Hydro_secondstage)
 
 def load_rule_FirstStage(model, j):
@@ -248,12 +248,23 @@ for s in model.scenarios:
     bottom = [bottom[i] + scenarios[s][i] for i in range(len(model.periods))]
     plt.xlabel("Period [h]")
     plt.ylabel("Production [MW]")
-    plt.title('Optimal production plan,')
+    plt.title('Optimal production plan: {}'.format(s))
     plt.legend()
     plt.show()
   
+prod_total = {plant: sum(values) for plant, values in prod.items()}
 
+print(prod_total)
 
+scenario_to_sum = 'S_avg'
+
+hydro1_total_scenario = sum(hydro1_scenarios[scenario_to_sum])
+
+# Summing up production values for 'hydro2_scenarios' for the specified scenario
+hydro2_total_scenario = sum(hydro2_scenarios[scenario_to_sum])
+
+print(hydro1_total_scenario)
+print(hydro2_total_scenario)
 
 
 
