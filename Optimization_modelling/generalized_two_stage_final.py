@@ -26,46 +26,16 @@ def InputData(data_file):
     data['solar'] = inputdata[['yi', 'P_min', 'P_max']].drop('Hydro1').drop('Hydro2')
     return data
 
-
-# Solar production based on forecast
-def read_solar_data(irrad_file, spec_file, start_date, end_date):
-    input_data_PV = read_excel_data(spec_file)
-    input_data_Irr = read_irr_data(irrad_file)
-    PV_power = pv_power_estimated(input_data_PV, input_data_Irr)
-    Solar_1 = convert_to_dict(PV_power, start_date, end_date, 'H')
-    Solar_p = scale_dict(Solar_1, 1)
-    return Solar_p
-
-
-# Start and end dates of the optimization
-start_date = '2018-05-28 13:00'
-end_date = '2018-05-28 13:00'
-
 # Original forecast for solar power production
-Solar_p = read_solar_data('data/Data_solar_irr_NOR.csv', 'data/PV_spec.xlsx', start_date, end_date)
-
 Solar_p = 15
+
+# Market price for selling
 Market = 60
 
 # Scenarios for solar forecast
 S_high = Solar_p*2
 S_avg = Solar_p*1
 S_low = Solar_p*0
-
-# Load
-L = 150
-
-# --Constants--
-Constants = {
-    'Load_penalty': 200,
-    'Hydro_cap': 90,
-    "Load": 150,
-    'Market': 60,
-    'Scenarios': ['S_high', 'S_avg', 'S_low'],
-    'probs': {'S_high': 1 / 3, 'S_avg': 1 / 3, 'S_low': 1 / 3},
-    'yi_s1': {'S_high': 25, 'S_avg': 25, 'S_low': 25},
-    'yi_s2': {'S_high': 35, 'S_avg': 35, 'S_low': 35}
-}
 
 
 # Production bounds for hydro plants in stage 1
@@ -75,18 +45,12 @@ def p_bounds(model, i, j):
 
 # Production constraint for hydro1 in stage 2
 def hydro1_bounds(model, s, j):
-    return model.p_s1[s, j] <= 60
+    return model.p_s1[s, j] <= model.Pmax['Hydro1']
 
 
 # Production constraint for hydro2 in stage 2
-
 def hydro2_bounds(model, s, j):
-    return model.p_s2[s, j] <= 100
-
-
-# Solar production in stage 1 must be equal to original forecast
-def Solar_rule(model):
-    return model.phi['Solar', 1] == 0
+    return model.p_s2[s, j] <= model.Pmax['Hydro2']
 
 
 # Solar production in stage 2 must be equal to scenario for high production
@@ -117,6 +81,12 @@ def Solar_low(model, j):
 def Hydro_firststage(model, i,j):
     return (model.p[i, 1]) <= model.Hmax
 
+#To check value of stohastic solution (remove comments if you want to check)
+#def Hydro1_VSS(model):
+#    return (model.p['Hydro1', 1]) == 20
+
+#def Hydro2_VSS(model): 
+#    return(model.p['Hydro2', 1])== 5
 
 # Sum of hydro production in stage 2 must be lower than capacity and the already used power in stage 1
 def hydro1_scenario_bounds(model, s, j):
@@ -128,22 +98,16 @@ def hydro2_scenario_bounds(model, s, j):
     return (model.p_s2[s, 2]) <= model.Hmax - (model.p['Hydro2', 1])
 
 
-# Total power generation in stage 1 must be equal to the hourly set load
-#def load_rule_FirstStage(model, j):
-#    return model.p['Hydro1', j] + model.p['Hydro2', j] + model.phi['Solar', j] + model.L_p['Load_penalty', j] == L[j]
-
-
 # Total power generation in stage 2 must be equal to the hourly set load
 def load_rule_TwoStage(model, s, j):
-    return model.p_s1[s, 2] + model.p_s2[s, 2] + model.phi_s[s, 2] + model.L_p_s[s, 2] == L
+    return model.p_s1[s, 2] + model.p_s2[s, 2] + model.phi_s[s, 2] + model.L_p_s[s, 2] == model.D
 
 
 # Objective function
 def ObjRule(model):
     # Sum of production costs in stage 1
     first_stage_obj = sum(model.yi[i] * model.p[i, 1] for i in model.plants) - sum(model.Mi[i]*model.p[i, 1] for i in model.plants) #minimize(power produced - power sold to market)
-
-
+    
     # Second stage objective (scenario-dependent), sum of all production costs
     second_stage_obj = sum(model.probs[l] * (
             model.yi_s1[l] * model.p_s1[l, 2] + model.yi_s2[l] * model.p_s2[l, 2] + model.Li[n] * model.L_p_s[l, 2]
@@ -156,82 +120,57 @@ def ObjRule(model):
 def model_setup(Constants, data):
     # --Defining sets--
     model = pyo.ConcreteModel()
-    # Defining the set of plants
-    model.plants = pyo.Set(initialize=['Hydro1', 'Hydro2'])
+    model.plants = pyo.Set(initialize=['Hydro1', 'Hydro2'])         # Defining the set of plants
     model.solar = pyo.Set(initialize=['Solar'])
-    # Defining the load penalty
-    model.penalty = pyo.Set(initialize=['Load_penalty'])
-    # Defining the set of periods
-    periods = set()
+    model.penalty = pyo.Set(initialize=['Load_penalty'])            # Defining the load penalty
+    periods = set()                                                 # Defining the set of periods
     for i in range(1, 3):
         periods.add(i)
-    model.periods = pyo.Set(initialize=periods)
-    # Defining scenarios for two-stage problem
-    model.scenarios = pyo.Set(initialize=Constants['Scenarios'])
+    model.periods = pyo.Set(initialize=periods)                 
+    model.scenarios = pyo.Set(initialize=Constants['Scenarios'])    # Defining scenarios for two-stage problem
 
     # --Defining parameters--
-    # Load penalty
-    model.Li = pyo.Param(model.penalty, initialize=Constants['Load_penalty'])
-    # Variable costs for plants
-    model.yi = pyo.Param(model.plants, initialize=data['hydro']['yi'])
-    model.ki = pyo.Param(model.solar, initialize=data['solar']['yi'])
+    model.Li = pyo.Param(model.penalty, initialize=Constants['Load_penalty'])        # Load penalty
+    model.yi = pyo.Param(model.plants, initialize=data['hydro']['yi'])               # Variable costs for plants
     model.yi_s1 = pyo.Param(model.scenarios, initialize=Constants['yi_s1'])
     model.yi_s2 = pyo.Param(model.scenarios, initialize=Constants['yi_s2'])
-    # Production bounds for plants
-    model.Pmin = pyo.Param(model.plants, initialize=data['hydro']['P_min'])
+    model.Pmin = pyo.Param(model.plants, initialize=data['hydro']['P_min'])          # Production bounds for plants
     model.Pmax = pyo.Param(model.plants, initialize=data['hydro']['P_max'])
     model.Phi_min = pyo.Param(model.solar, initialize=data['solar']['P_min'])
     model.Phi_max = pyo.Param(model.solar, initialize=data['solar']['P_max'])
-    # probabilities for each scenario
-    model.probs = pyo.Param(model.scenarios, initialize=Constants['probs'])
-    # Maximum hydro production available for the two plant for 24 hours
-    model.Hmax = pyo.Param(initialize=Constants['Hydro_cap'])
+    model.probs = pyo.Param(model.scenarios, initialize=Constants['probs'])          # Probabilities for each scenario
+    model.Hmax = pyo.Param(initialize=Constants['Hydro_cap'])                        # Maximum hydro production available for the two plant for 24 hours
     model.Mi = pyo.Param(model.plants, initialize=Constants['Market'])
+    model.D=pyo.Param(initialize=Constants['Load'])
 
     # --Defining variables and bounds--
-    # Production from hydro plants stage 1
-    model.p = pyo.Var(model.plants, model.periods, bounds=p_bounds)
-    # Scenario and stage 2 based hydro power
-    model.p_s1 = pyo.Var(model.scenarios, model.periods, within=NonNegativeReals)
+    model.p = pyo.Var(model.plants, model.periods, bounds=p_bounds)                  # Production from hydro plants stage 1
+    model.p_s1 = pyo.Var(model.scenarios, model.periods, within=NonNegativeReals)    # Scenario and stage 2 based hydro power
     model.p_s2 = pyo.Var(model.scenarios, model.periods, within=NonNegativeReals)
-    # Production from solar installation base case
-    model.phi = pyo.Var(model.solar, model.periods, within=NonNegativeReals)
-    # Production from solar installation scenario based
-    model.phi_s = pyo.Var(model.scenarios, model.periods, within=NonNegativeReals)
-    # Load penalty during scenarios
-    model.L_p_s = pyo.Var(model.scenarios, model.periods, within=NonNegativeReals)
+    model.phi_s = pyo.Var(model.scenarios, model.periods, within=NonNegativeReals)   # Production from solar installation scenario based
+    model.L_p_s = pyo.Var(model.scenarios, model.periods, within=NonNegativeReals)   # Load penalty during scenarios
 
     # --Defining constraints-- all based on constraint functions defined above
-    model.solar_cons = pyo.Constraint(rule=Solar_rule)
-
-    model.high_cons = pyo.Constraint(model.periods, rule=Solar_high)
-
-    model.avg_cons = pyo.Constraint(model.periods, rule=Solar_avg)
-
+    model.high_cons = pyo.Constraint(model.periods, rule=Solar_high)                                          #Constraints for initializing scenario based solar production
+    model.avg_cons = pyo.Constraint(model.periods, rule=Solar_avg)              
     model.low_cons = pyo.Constraint(model.periods, rule=Solar_low)
-
-    model.hydro1_cons = pyo.Constraint(model.scenarios, model.periods, rule=hydro1_bounds)
-
-    model.hydro2_cons = pyo.Constraint(model.scenarios, model.periods, rule=hydro2_bounds)
-
-    model.hydro_cons = pyo.Constraint(model.plants, model.periods, rule=Hydro_firststage)
-
-    model.hydro1_scenario_cons = pyo.Constraint(model.scenarios, model.periods, rule=hydro1_scenario_bounds)
-
+    model.hydro1_cons = pyo.Constraint(model.scenarios, model.periods, rule=hydro1_bounds)                    #Production bounds for hydro1 generator
+    model.hydro2_cons = pyo.Constraint(model.scenarios, model.periods, rule=hydro2_bounds)                    #Production bounds for hydro1 generator
+    model.hydro_cons = pyo.Constraint(model.plants, model.periods, rule=Hydro_firststage)                     #Constraining first stage hydro power within the introduced capacity
+    #model.hydro1_VSS= pyo.Constraint(rule=Hydro1_VSS)                                                        #Code for Value of stochastic solution (remove comment if you want to check)
+    #model.hydro2_VSS= pyo.Constraint(rule=Hydro2_VSS)
+    model.hydro1_scenario_cons = pyo.Constraint(model.scenarios, model.periods, rule=hydro1_scenario_bounds)  #Constraining second stage hydro power to me the remaining capacity from stage 1
     model.hydro2_scenario_cons = pyo.Constraint(model.scenarios, model.periods, rule=hydro2_scenario_bounds)
-
-    model.load_cons_TwoStage = pyo.Constraint(model.scenarios, model.periods, rule=load_rule_TwoStage)
+    model.load_cons_TwoStage = pyo.Constraint(model.scenarios, model.periods, rule=load_rule_TwoStage)        #Load rule for stage two 
 
     # Objective rule
-    model.obj = pyo.Objective(rule=ObjRule, sense=pyo.minimize)
+    model.obj = pyo.Objective(rule=ObjRule, sense=pyo.minimize)                                               #Objective rule for two-stage problem 
     return model
 
 
 def solve(model):
-    # solver
-    opt = SolverFactory('gurobi', solver_io="python")
-    # defining dual
-    model.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+    opt = SolverFactory('gurobi', solver_io="python")       # solver
+    model.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)    # defining dual
     results = opt.solve(model, tee=True)
     return results, model
 
@@ -239,8 +178,9 @@ def solve(model):
 def displayresults(model):
     return print(model.display())  # model.dual.display())
 
-
+#Plotting for individual scenarios 
 def plotting(model):
+    #Adding decision variable values to dictionaries
     prod = {}
     penalty_scenarios = {}
     scenarios = {}
@@ -254,7 +194,7 @@ def plotting(model):
         scenarios[h] = [0, value(model.phi_s[h, 2])]
         penalty_scenarios[h] = [0, value(model.L_p_s[h, 2])]
 
-    # Plotting stacked plot for production plan
+    # Plotting stacked bar plot for production plan
     plt.figure(figsize=(10, 6))
     bottom = [0]*len(model.periods)
 
@@ -263,8 +203,6 @@ def plotting(model):
         bottom = [bottom[i] + prod[plant][i] for i in range(len(model.periods))]
         
     for s in model.scenarios:
-        #plt.figure(figsize=(10, 6))
-        #bottom = [0]*len(model.periods)
         if model.probs[s] > 0:
             plt.bar(model.periods, hydro1_scenarios[s], bottom=bottom, color="C0")
             bottom = [bottom[i] + hydro1_scenarios[s][i] for i in range(len(model.periods))]
@@ -282,43 +220,43 @@ def plotting(model):
     plt.show()
 
 
-
+    #Finding production for stage 1
     prod_total = {plant: sum(values) for plant, values in prod.items()}
 
-    print(prod_total)
+    print("Production allocation stage 1:", prod_total)
 
-    scenario_to_sum = 'S_avg'
-
+    scenario_avg = 'S_avg'
     scenario_high = 'S_high'
-
     scenario_low = 'S_low'
 
-    hydro1_total_scenario = sum(hydro1_scenarios[scenario_to_sum])
-
     # Summing up production values for 'hydro2_scenarios' for the specified scenario
-    hydro2_total_scenario = sum(hydro2_scenarios[scenario_to_sum])
-
+    hydro1_total_scenario = sum(hydro1_scenarios[scenario_avg])
+    hydro2_total_scenario = sum(hydro2_scenarios[scenario_avg])
     hydro1_total_scenario2 = sum(hydro1_scenarios[scenario_high])
-
-    # Summing up production values for 'hydro2_scenarios' for the specified scenario
     hydro2_total_scenario2 = sum(hydro2_scenarios[scenario_high])
-
     hydro1_total_scenario3 = sum(hydro1_scenarios[scenario_low])
-
-    # Summing up production values for 'hydro2_scenarios' for the specified scenario
     hydro2_total_scenario3 = sum(hydro2_scenarios[scenario_low])
+    
+    if model.probs[scenario_high]>0:
+        print("Solar power for current scenario:", model.phi_s[scenario_high,2].value)
+        print('Stage 2 Hydro1 Production (High):', hydro1_total_scenario2)
+        print('Stage 2 Hydro2 Production (High):', hydro2_total_scenario2)
+        print('Amount of load penalty for second stage:', model.L_p_s[scenario_high, 2].value)
+    elif model.probs[scenario_avg]>0:
+        print("Solar power for current scenario:", model.phi_s[scenario_avg,2].value)
+        print('Stage 2 Hydro1 Production (Avg):', hydro1_total_scenario)
+        print('Stage 2 Hydro2 Production (Avg):', hydro2_total_scenario)
+        print('Amount of load penalty for second stage:', model.L_p_s[scenario_avg, 2].value)
+    else: 
+        print("Solar power for current scenario:", model.phi_s[scenario_low,2].value)
+        print('Stage 2 Hydro1 Production (Low):', hydro1_total_scenario3)
+        print('Stage 2 Hydro2 Production (Low):', hydro2_total_scenario3)
+        print('Amount of load penalty for second stage:', model.L_p_s[scenario_low, 2].value)
+    print("The objective value is:", model.obj())
 
-    print('hydro1 S_high:', hydro1_total_scenario2)
-    print('hydro2 S_high:', hydro2_total_scenario2)
-
-    print('hydro1 S_avg:', hydro1_total_scenario)
-    print('hydro2 S_avg:', hydro2_total_scenario)
-
-    print('hydro1 S_low:', hydro1_total_scenario3)
-    print('hydro2 S_low:', hydro2_total_scenario3)
-
-
+#Plotting for stochastic model 
 def plotting_stoch(model):
+    #Adding decision variable values to dictionaries
     prod = {}
     penalty_scenarios = {}
     scenarios = {}
@@ -333,7 +271,7 @@ def plotting_stoch(model):
         penalty_scenarios[h] = [0, value(model.L_p_s[h, 2])]
     for s in model.scenarios:
         
-        # Plotting stacked plot for production plan
+        # Plotting stacked bar plot for production plan
         plt.figure(figsize=(10, 6))
         bottom = [0]*len(model.periods)
 
@@ -356,37 +294,40 @@ def plotting_stoch(model):
             plt.show()
 
 
-
+    #Finding production for stage 1 
     prod_total = {plant: sum(values) for plant, values in prod.items()}
 
-    print(prod_total)
-
-    scenario_to_sum = 'S_avg'
-
+    print("Production allocation stage 1:", prod_total)
+    print("\n")
+    scenario_avg = 'S_avg'
     scenario_high = 'S_high'
-
     scenario_low = 'S_low'
 
-    hydro1_total_scenario = sum(hydro1_scenarios[scenario_to_sum])
-
     # Summing up production values for 'hydro2_scenarios' for the specified scenario
-    hydro2_total_scenario = sum(hydro2_scenarios[scenario_to_sum])
-
+    hydro1_total_scenario = sum(hydro1_scenarios[scenario_avg])
+    hydro2_total_scenario = sum(hydro2_scenarios[scenario_avg])
     hydro1_total_scenario2 = sum(hydro1_scenarios[scenario_high])
-
-    # Summing up production values for 'hydro2_scenarios' for the specified scenario
     hydro2_total_scenario2 = sum(hydro2_scenarios[scenario_high])
-
     hydro1_total_scenario3 = sum(hydro1_scenarios[scenario_low])
-
-    # Summing up production values for 'hydro2_scenarios' for the specified scenario
     hydro2_total_scenario3 = sum(hydro2_scenarios[scenario_low])
-
-    print('hydro1 S_high:', hydro1_total_scenario2)
-    print('hydro2 S_high:', hydro2_total_scenario2)
-
-    print('hydro1 S_avg:', hydro1_total_scenario)
-    print('hydro2 S_avg:', hydro2_total_scenario)
-
-    print('hydro1 S_low:', hydro1_total_scenario3)
-    print('hydro2 S_low:', hydro2_total_scenario3)
+    
+    
+    print("-- Scenario: ", scenario_high,", with probability:", model.probs[scenario_high], "--")
+    print("Solar power for current scenario:", model.phi_s[scenario_high,2].value)
+    print('Stage 2 Hydro1 Production (High):', hydro1_total_scenario2)
+    print('Stage 2 Hydro2 Production (High):', hydro2_total_scenario2)
+    print('Amount of load penalty for second stage:', model.L_p_s[scenario_high, 2].value)
+    print("\n")
+    print("-- Scenario: ", scenario_avg,", with probability:", model.probs[scenario_avg], "--")
+    print("Solar power for current scenario:", model.phi_s[scenario_avg,2].value)
+    print('Stage 2 Hydro1 Production (Avg):', hydro1_total_scenario)
+    print('Stage 2 Hydro2 Production (Avg):', hydro2_total_scenario)
+    print('Amount of load penalty for second stage:', model.L_p_s[scenario_avg, 2].value)
+    print("\n")
+    print("-- Scenario: ", scenario_low,", with probability:", model.probs[scenario_low], "--")
+    print("Solar power for current scenario:", model.phi_s[scenario_low,2].value)
+    print('Stage 2 Hydro1 Production (Low):', hydro1_total_scenario3)
+    print('Stage 2 Hydro2 Production (Low):', hydro2_total_scenario3)
+    print('Amount of load penalty for second stage:', model.L_p_s[scenario_low, 2].value)
+    print("\n")
+    print("The objective value is:", model.obj())
